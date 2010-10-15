@@ -1,9 +1,11 @@
+{-# LANGUAGE TupleSections #-}
 {-# LANGUAGE TypeOperators #-}
 module Main where
 import Control.Applicative
 import Control.Arrow
 import Control.Category
 import Control.Monad ((>=>))
+import Data.Monoid
 import Prelude hiding (id, (.))
 
 main :: IO ()
@@ -20,9 +22,8 @@ instance Category (State s) where
   ST f . ST g = ST $ f . g
 
 instance Arrow (State s) where
-  arr f         = ST $ id *** f
-  first (ST f)  = ST $ assoc . (f *** id) . unassoc
-  -- second (ST f) = ST $ assoc . (id *** f) . unassoc
+  arr f         = ST $ second f
+  first (ST f)  = ST $ assoc . first f . unassoc
 
 assoc :: ((a, b), c) -> (a, (b, c))
 assoc ~(~(a, b), c) = (a, (b, c))
@@ -67,7 +68,7 @@ testND = do
   printND $ arr succ `addA` arr succ
 
 -- Map transformers
-newtype MapTrans s i o = MT { runMT :: (s -> i) -> (s -> o) }
+newtype MapTrans s i o = MT { runMT :: (s -> i) -> s -> o }
 
 instance Category (MapTrans s) where
   id          = MT id
@@ -75,18 +76,17 @@ instance Category (MapTrans s) where
 
 instance Arrow (MapTrans s) where
   arr f         = MT (f .)
-  first (MT f)  = MT $ zipMap . (f *** id) . unzipMap
-  second (MT f) = MT $ zipMap . (id *** f) . unzipMap
+  first (MT f)  = MT $ zipMap . first f . unzipMap
+  second (MT f) = MT $ zipMap . second f . unzipMap
 
-zipMap :: (s -> a, s -> b) -> (s -> (a, b))
+zipMap :: (s -> a, s -> b) -> s -> (a, b)
 zipMap h s = (fst h s, snd h s)
 
 unzipMap :: (s -> (a, b)) -> (s -> a, s -> b)
 unzipMap h = (fst . h, snd . h)
              
 testMT :: IO ()
-testMT = do
-  print $ runMT (arr succ) pred 0
+testMT = print $ runMT (arr succ) pred 0
 
 -- Simple automa
 newtype Auto i o = A { runA :: i -> (o, Auto i o) }
@@ -113,3 +113,21 @@ testA = undefined
 -- commons
 addA :: Arrow (~>) => a ~> Int -> a ~> Int -> a ~> Int
 addA f g = f &&& g >>> arr (uncurry (+))
+
+
+-- exercise 10.1
+newtype Reader r i o = R ((r, i) -> o)
+
+instance Category (Reader r) where
+  id        = R snd
+  R f . R g = R $ uncurry $ \r -> curry f r . curry g r
+
+instance Arrow (Reader r) where
+  arr f = R $ uncurry $ const f
+  first f = undefined
+
+newtype Monoid m => Writer m i o = W (i -> (m, o))
+
+instance Monoid m => Category (Writer m) where
+  id        = W (mempty,)
+  W f . W g = undefined
