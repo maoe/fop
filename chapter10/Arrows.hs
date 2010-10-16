@@ -116,6 +116,8 @@ addA f g = f &&& g >>> arr (uncurry (+))
 
 
 -- exercise 10.1
+
+-- Reader
 newtype Reader r i o = R ((r, i) -> o)
 
 instance Category (Reader r) where
@@ -123,11 +125,19 @@ instance Category (Reader r) where
   R f . R g = R $ uncurry $ \r -> curry f r . curry g r
 
 instance Arrow (Reader r) where
-  arr f = R $ uncurry $ const f
-  first f = undefined
+  arr         = R . uncurry . const
+  first (R f) = R $ first f . unassoc
 
+-- Writer
 newtype Monoid m => Writer m i o = W (i -> (m, o))
 
 instance Monoid m => Category (Writer m) where
   id        = W (mempty,)
-  W f . W g = undefined
+  W f . W g = W $ \i -> let (m,  o)  = g i
+                            (m', o') = f o
+                        in (m `mappend` m', o')
+
+instance Monoid m => Arrow (Writer m) where
+  arr f       = W $ (mempty,) . f
+  first (W f) = W $ assoc . first f
+
