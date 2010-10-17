@@ -141,3 +141,42 @@ instance Monoid m => Arrow (Writer m) where
   arr f       = W $ (mempty,) . f
   first (W f) = W $ assoc . first f
 
+
+-- exercise 10.2
+newtype ListMap i o = LM ([i] -> [o])
+
+instance Category ListMap where
+  id          = LM id
+  LM f . LM g = LM (f . g)
+
+instance Arrow ListMap where
+  arr          = LM . fmap
+  first (LM f) = LM $ \xs -> let (is, ts) = unzip xs
+                             in uncurry zip (f is, ts)
+
+{-
+  TODO
+-}
+
+-- exercise 10.3
+
+data Stream a = Cons a (Stream a)
+
+instance Functor Stream where
+  fmap f (Cons x xs) = Cons (f x) (fmap f xs)
+
+newtype StreamMap i o = SM (Stream i -> Stream o)
+
+instance Category StreamMap where
+  id          = SM id
+  SM f . SM g = SM (f . g)
+
+instance Arrow StreamMap where
+  arr          = SM . fmap
+  first (SM f) = SM $ stream . first f . unstream
+
+stream :: (Stream a, b) -> Stream (a, b)
+stream (s, t) = fmap (,t) s
+
+unstream :: Stream (a, b) -> (Stream a, b)
+unstream (Cons (x, y) xs) = (Cons x (fst $ unstream xs), y)
