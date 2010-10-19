@@ -180,3 +180,11 @@ stream (s, t) = fmap (,t) s
 
 unstream :: Stream (a, b) -> (Stream a, b)
 unstream (Cons (x, y) xs) = (Cons x (fst $ unstream xs), y)
+
+-- exercise 10.4
+(|><) :: Arrow (~>) => a ~> b -> (a -> b) -> (a, a) ~> (b, b)
+f |>< g = first f >>> arr (id *** g)
+
+{-
+  TODO
+-}
