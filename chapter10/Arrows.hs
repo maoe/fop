@@ -1,18 +1,12 @@
 {-# LANGUAGE TupleSections #-}
 {-# LANGUAGE TypeOperators #-}
-module Main where
+module Arrows where
 import Control.Applicative
 import Control.Arrow
 import Control.Category
 import Control.Monad ((>=>))
 import Data.Monoid
 import Prelude hiding (id, (.))
-
-main :: IO ()
-main = putStrLn "-- testST --" >> testST >>
-       putStrLn "-- testND --" >> testND >>
-       putStrLn "-- testMT --" >> testMT >>
-       putStrLn "-- testA --"  >> testA
 
 -- State transformers
 newtype State s i o = ST { runST :: (s, i) -> (s, o) }
@@ -213,6 +207,10 @@ instance ArrowApply Auto where
   app = arr $ \(A f, x) -> fst (f x)
 
 -- ArrowChoice
+(|+|) :: (a -> a') -> (b -> b') -> Either a b -> Either a' b'
+(f |+| g) (Left a)  = Left (f a)
+(f |+| g) (Right b) = Right (g b)
+
 assocsum :: Either (Either a b) c -> Either a (Either b c)
 assocsum (Left (Left a))  = Left a
 assocsum (Left (Right a)) = Right (Left a)
@@ -223,19 +221,28 @@ distr (Left a, c)  = Left (a, c)
 distr (Right b, c) = Right (b, c)
 
 instance ArrowChoice (State s) where
-  -- left :: State s i o -> State s (Either i e) (Either o e)
+  left (ST f) = ST lf
+    where lf (s, Left i)  = let (s', o) = f (s, i) in (s', Left o)
+          lf (s, Right c) = (s, Right c)
 
 instance ArrowChoice NonDet where
-  -- left :: NonDet i o -> NonDet (Either i e) (Either o e)
+  left (ND f) = ND lf
+    where lf (Left i)  = fmap Left (f i)
+          lf (Right c) = pure $ Right c
 
 instance ArrowChoice Auto where
-  -- left :: Auto i o -> Auto (Either i e) (Either o e)
   left (A f) = A lf
     where lf (Left i)  = let (o, f') = f i
                          in (Left o, left f')
           lf (Right i) = (Right i, left (A f))
 
 instance ArrowChoice StreamMap where
+  left (SM f) = SM $ \xs -> replace xs (f (getLeft xs))
+    where
+      getLeft (Cons (Left x) xs) = Cons x (getLeft xs)
+      getLeft (Cons _        xs) = getLeft xs
+      replace (Cons (Left _) xs) ~(Cons y ys) = Cons (Left y)  (replace xs ys)
+      replace (Cons (Right x) xs) ys          = Cons (Right x) (replace xs ys)
 
 newtype Except a b c = E (a b (Either String c))
 
