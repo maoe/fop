@@ -202,8 +202,12 @@ mkPair :: Arrow (~>) => a -> b ~> (a, b)
 mkPair = arr . (,)
 
 instance ArrowApply (State s) where
+  -- app :: State s (State s i o, i) o
+  app = ST $ \(s, (ST f, x)) -> f (s, x)
 
 instance ArrowApply NonDet where
+  -- app :: NonDet (NonDet i o, i) o
+  app = ND $ \(ND f, i) -> f i
 
 instance ArrowApply Auto where
   app = arr $ \(A f, x) -> fst (f x)
@@ -219,10 +223,13 @@ distr (Left a, c)  = Left (a, c)
 distr (Right b, c) = Right (b, c)
 
 instance ArrowChoice (State s) where
+  -- left :: State s i o -> State s (Either i e) (Either o e)
 
 instance ArrowChoice NonDet where
+  -- left :: NonDet i o -> NonDet (Either i e) (Either o e)
 
 instance ArrowChoice Auto where
+  -- left :: Auto i o -> Auto (Either i e) (Either o e)
   left (A f) = A lf
     where lf (Left i)  = let (o, f') = f i
                          in (Left o, left f')
@@ -230,12 +237,11 @@ instance ArrowChoice Auto where
 
 instance ArrowChoice StreamMap where
 
-
 newtype Except a b c = E (a b (Either String c))
 
-instance Category (Except (~>)) where
+instance Category (Except a) where
 
-instance ArrowChoice (~>) => Arrow (Except (~>))
+instance ArrowChoice a => Arrow (Except a)
 
 
 --
@@ -253,3 +259,4 @@ instance ArrowLoop Auto where
                          in (o, loop f')
 
 instance ArrowLoop StreamMap where
+  
