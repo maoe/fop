@@ -188,3 +188,68 @@ f |>< g = first f >>> arr (id *** g)
 {-
   TODO
 -}
+
+
+--
+-- Special cases
+--
+
+-- ArrowApply
+curryA :: Arrow (~>) => (a, b) ~> c -> a -> b ~> c
+curryA f b = mkPair b >>> f
+
+mkPair :: Arrow (~>) => a -> b ~> (a, b)
+mkPair = arr . (,)
+
+instance ArrowApply (State s) where
+
+instance ArrowApply NonDet where
+
+instance ArrowApply Auto where
+  app = arr $ \(A f, x) -> fst (f x)
+
+-- ArrowChoice
+assocsum :: Either (Either a b) c -> Either a (Either b c)
+assocsum (Left (Left a))  = Left a
+assocsum (Left (Right a)) = Right (Left a)
+assocsum (Right a)        = Right (Right a)
+
+distr :: (Either a b, c) -> Either (a, c) (b, c)
+distr (Left a, c)  = Left (a, c)
+distr (Right b, c) = Right (b, c)
+
+instance ArrowChoice (State s) where
+
+instance ArrowChoice NonDet where
+
+instance ArrowChoice Auto where
+  left (A f) = A lf
+    where lf (Left i)  = let (o, f') = f i
+                         in (Left o, left f')
+          lf (Right i) = (Right i, left (A f))
+
+instance ArrowChoice StreamMap where
+
+
+newtype Except a b c = E (a b (Either String c))
+
+instance Category (Except (~>)) where
+
+instance ArrowChoice (~>) => Arrow (Except (~>))
+
+
+--
+trace :: ((a, c) -> (b, c)) -> a -> b
+trace f a = let (b, c) = f (a, c) in b
+
+instance ArrowLoop (State s) where
+  loop (ST f) = ST $ trace $ unassoc . f . assoc
+
+instance ArrowLoop (MapTrans s) where
+  loop (MT f) = MT $ trace $ unzipMap . f . zipMap
+
+instance ArrowLoop Auto where
+  loop (A f) = A $ \i -> let (~(o, o'), f') = f (i, o')
+                         in (o, loop f')
+
+instance ArrowLoop StreamMap where
