@@ -246,10 +246,13 @@ instance ArrowChoice StreamMap where
 
 newtype Except a b c = E (a b (Either String c))
 
-instance Category (Except a) where
+instance Arrow a => Category (Except a) where
+  id = E $ arr Right
+  (.) = undefined
 
-instance ArrowChoice a => Arrow (Except a)
-
+instance ArrowChoice a => Arrow (Except a) where
+  arr = undefined
+  first = undefined
 
 --
 trace :: ((a, c) -> (b, c)) -> a -> b
@@ -266,4 +269,5 @@ instance ArrowLoop Auto where
                          in (o, loop f')
 
 instance ArrowLoop StreamMap where
-  
+  loop (SM f) = SM $ trace $ unstream . f . stream
+
