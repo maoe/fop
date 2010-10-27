@@ -4,10 +4,11 @@ module Arrows where
 import Control.Applicative
 import Control.Arrow
 import Control.Category
+import Control.Functor.Zip
 import Control.Monad ((>=>))
 import Data.Foldable
 import Data.Monoid
-import Prelude hiding (id, (.), foldr, foldr1)
+import Prelude hiding (id, (.), foldr)
 
 -- State transformers
 newtype State s i o = ST { runST :: (s, i) -> (s, o) }
@@ -163,6 +164,9 @@ instance Functor Stream where
 instance Foldable Stream where
   foldMap f (Cons x xs) = f x `mappend` foldMap f xs
 
+instance Zip Stream where
+  fzip (Cons x xs) (Cons y ys) = Cons (x, y) $ fzip xs ys
+
 newtype StreamMap i o = SM (Stream i -> Stream o)
 
 instance Category StreamMap where
@@ -241,26 +245,13 @@ instance ArrowChoice Auto where
           lf (Right i) = (Right i, left $ A f)
 
 instance ArrowChoice StreamMap where
-  left (SM f) = SM $ \xs -> replace xs (f (getLeft xs))
-    where
-      getLeft :: Stream (Either a b) -> Stream a
-      getLeft xs = foldr go undefined xs
-        where go (Left x)  xs = Cons x xs
-              go (Right r) xs = xs
-      replace (Cons (Left _) xs) ~(Cons y ys) = Cons (Left y)  (replace xs ys)
-      replace (Cons (Right x) xs) ys          = Cons (Right x) (replace xs ys)
-
-replace :: Stream (Either a b) -> Stream c -> Stream (Either c b)
-replace xs ys = fmap f $ undefined xs ys
-  where f = undefined
-
-{-
-  foldr :: (Either a b -> Stream a -> Stream a)
-        -> Stream a
-        -> Stream (Either a b)
-        -> Stream a
--}
-
+  left (SM f) = SM $ replace <*> f . getLeft
+    where getLeft xs = foldr go undefined xs
+            where go (Left x)  xs = Cons x xs
+                  go (Right r) xs = xs
+          replace xs ys = fzipWith f xs ys
+            where f (Left _)  ~y = Left y
+                  f (Right x) _  = Right x
 
 newtype Except a b c = E (a b (Either String c))
 
