@@ -5,8 +5,9 @@ import Control.Applicative
 import Control.Arrow
 import Control.Category
 import Control.Monad ((>=>))
+import Data.Foldable
 import Data.Monoid
-import Prelude hiding (id, (.))
+import Prelude hiding (id, (.), foldr, foldr1)
 
 -- State transformers
 newtype State s i o = ST { runST :: (s, i) -> (s, o) }
@@ -159,6 +160,9 @@ data Stream a = Cons a (Stream a)
 instance Functor Stream where
   fmap f (Cons x xs) = Cons (f x) (fmap f xs)
 
+instance Foldable Stream where
+  foldMap f (Cons x xs) = f x `mappend` foldMap f xs
+
 newtype StreamMap i o = SM (Stream i -> Stream o)
 
 instance Category StreamMap where
@@ -177,7 +181,7 @@ unstream (Cons (x, y) xs) = (Cons x (fst $ unstream xs), y)
 
 -- exercise 10.4
 (|><) :: Arrow (~>) => a ~> b -> (a -> b) -> (a, a) ~> (b, b)
-f |>< g = first f >>> arr (id *** g)
+f |>< g = first f >>> arr (second g)
 
 {-
   TODO
@@ -227,28 +231,42 @@ instance ArrowChoice (State s) where
 
 instance ArrowChoice NonDet where
   left (ND f) = ND lf
-    where lf (Left i)  = fmap Left (f i)
+    where lf (Left i)  = Left <$> f i
           lf (Right c) = pure $ Right c
 
 instance ArrowChoice Auto where
   left (A f) = A lf
     where lf (Left i)  = let (o, f') = f i
                          in (Left o, left f')
-          lf (Right i) = (Right i, left (A f))
+          lf (Right i) = (Right i, left $ A f)
 
 instance ArrowChoice StreamMap where
   left (SM f) = SM $ \xs -> replace xs (f (getLeft xs))
     where
-      getLeft (Cons (Left x) xs) = Cons x (getLeft xs)
-      getLeft (Cons _        xs) = getLeft xs
+      getLeft :: Stream (Either a b) -> Stream a
+      getLeft xs = foldr go undefined xs
+        where go (Left x)  xs = Cons x xs
+              go (Right r) xs = xs
       replace (Cons (Left _) xs) ~(Cons y ys) = Cons (Left y)  (replace xs ys)
       replace (Cons (Right x) xs) ys          = Cons (Right x) (replace xs ys)
 
+replace :: Stream (Either a b) -> Stream c -> Stream (Either c b)
+replace xs ys = fmap f $ undefined xs ys
+  where f = undefined
+
+{-
+  foldr :: (Either a b -> Stream a -> Stream a)
+        -> Stream a
+        -> Stream (Either a b)
+        -> Stream a
+-}
+
+
 newtype Except a b c = E (a b (Either String c))
 
-instance Arrow a => Category (Except a) where
-  id = E $ arr Right
-  (.) = undefined
+instance ArrowChoice a => Category (Except a) where
+  id        = E $ arr Right
+  E f . E g = E $ g >>> (arr Left ||| f)
 
 instance ArrowChoice a => Arrow (Except a) where
   arr = undefined
