@@ -52,7 +52,8 @@ Library
   Exposed-modules:     Arrows
   
   -- Packages needed in order to build this package.
-  Build-depends:       base >= 4
+  Build-depends:       base >= 4,
+                       category-extras >= 0.44 && < 0.60
   
   -- Modules not exported by this package.
   -- Other-modules:       
