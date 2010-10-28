@@ -165,7 +165,7 @@ instance Foldable Stream where
   foldMap f (Cons x xs) = f x `mappend` foldMap f xs
 
 instance Zip Stream where
-  fzip (Cons x xs) (Cons y ys) = Cons (x, y) $ fzip xs ys
+  fzip ~(Cons x xs) ~(Cons y ys) = Cons (x, y) $ fzip xs ys
 
 newtype StreamMap i o = SM (Stream i -> Stream o)
 
@@ -249,9 +249,9 @@ instance ArrowChoice StreamMap where
     where getLeft xs = foldr go undefined xs
             where go (Left x)  xs = Cons x xs
                   go (Right r) xs = xs
-          replace xs ys = fzipWith f xs ys
-            where f (Left _)  ~y = Left y
-                  f (Right x) _  = Right x
+          replace = fzipWith f
+            where f (Left _)  y = Left y
+                  f (Right x) _ = Right x
 
 newtype Except a b c = E (a b (Either String c))
 
@@ -260,7 +260,7 @@ instance ArrowChoice a => Category (Except a) where
   E f . E g = E $ g >>> (arr Left ||| f)
 
 instance ArrowChoice a => Arrow (Except a) where
-  arr = undefined
+  arr f = undefined
   first = undefined
 
 --
