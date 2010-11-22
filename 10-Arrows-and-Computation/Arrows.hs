@@ -104,15 +104,18 @@ evalA :: Auto i o -> i -> o
 evalA a = fst . runA a
 
 testA :: IO ()
-testA = undefined
+testA = do
+  print $ evalA id 1
+  print $ evalA (id >>> id) 1
+  print $ evalA (arr succ) 1
 
 -- commons
 addA :: Arrow (~>) => a ~> Int -> a ~> Int -> a ~> Int
 addA f g = f &&& g >>> arr (uncurry (+))
 
-
--- exercise 10.1
-
+-------------------
+-- exercise 10.1 --
+-------------------
 -- Reader
 newtype Reader r i o = R ((r, i) -> o)
 
@@ -137,8 +140,9 @@ instance Monoid m => Arrow (Writer m) where
   arr f       = W $ (mempty,) . f
   first (W f) = W $ assoc . first f
 
-
--- exercise 10.2
+-------------------
+-- exercise 10.2 --
+-------------------
 newtype ListMap i o = LM ([i] -> [o])
 
 instance Category ListMap where
@@ -147,14 +151,13 @@ instance Category ListMap where
 
 instance Arrow ListMap where
   arr          = LM . fmap
-  first (LM f) = LM $ \xs -> let (is, ts) = unzip xs
-                             in uncurry zip (f is, ts)
+  first (LM f) = LM (uncurry zip . swap . liftA f . swap . unzip)
 
-{-
-  TODO
--}
+swap (x, y) = (y, x)
 
--- exercise 10.3
+-------------------
+-- exercise 10.3 --
+-------------------
 
 data Stream a = Cons a (Stream a)
 
