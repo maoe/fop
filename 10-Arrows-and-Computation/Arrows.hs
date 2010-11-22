@@ -153,8 +153,6 @@ instance Arrow ListMap where
   arr          = LM . fmap
   first (LM f) = LM (uncurry zip . first f . unzip)
 
-swap (x, y) = (y, x)
-
 -------------------
 -- exercise 10.3 --
 -------------------
