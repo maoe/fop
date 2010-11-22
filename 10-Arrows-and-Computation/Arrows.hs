@@ -151,7 +151,7 @@ instance Category ListMap where
 
 instance Arrow ListMap where
   arr          = LM . fmap
-  first (LM f) = LM (uncurry zip . swap . liftA f . swap . unzip)
+  first (LM f) = LM (uncurry zip . first f . unzip)
 
 swap (x, y) = (y, x)
 
