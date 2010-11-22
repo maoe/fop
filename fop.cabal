@@ -46,7 +46,7 @@ Cabal-version:       >=1.2
 
 
 Library
-  Hs-source-dirs:      chapter10
+  Hs-source-dirs:      10-Arrows-and-Computation
 
   -- Modules exported by the library.
   Exposed-modules:     Arrows
