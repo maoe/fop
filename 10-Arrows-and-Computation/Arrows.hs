@@ -1,10 +1,15 @@
+{-# LANGUAGE Arrows #-}
 {-# LANGUAGE TupleSections #-}
 {-# LANGUAGE TypeOperators #-}
-module Arrows where
+module Arrows
+  ( assoc
+  , unassoc
+  ) where
+
 import Control.Applicative
 import Control.Arrow
 import Control.Category
-import Control.Functor.Zip
+-- import Control.Functor.Zip -- from category-extras
 import Control.Monad ((>=>))
 import Data.Foldable
 import Data.Monoid
@@ -153,6 +158,18 @@ instance Arrow ListMap where
   arr          = LM . fmap
   first (LM f) = LM (uncurry zip . first f . unzip)
 
+{-
+  A. The extension law fails.
+
+                 first
+ [i] -> [o] -----------------> ([i], a) -> ([o], a)    /=    [(i, a)] -> [(o, a)]
+     |                                  |
+     | arr                              X   arr fails
+     |                                  |
+     v           first                  v
+ ListMap i o ---------------> ListMap (i, a) (o, a)
+-}
+
 -------------------
 -- exercise 10.3 --
 -------------------
@@ -164,6 +181,12 @@ instance Functor Stream where
 
 instance Foldable Stream where
   foldMap f (Cons x xs) = f x `mappend` foldMap f xs
+
+class Functor f => Zip f where
+	fzip :: f a -> f b -> f (a, b)
+	fzip = fzipWith (,)
+	fzipWith :: (a -> b -> c) -> f a -> f b -> f c
+	fzipWith f as bs = fmap (uncurry f) (fzip as bs)
 
 instance Zip Stream where
   fzip ~(Cons x xs) ~(Cons y ys) = Cons (x, y) $ fzip xs ys
@@ -184,12 +207,19 @@ stream (s, t) = fmap (,t) s
 unstream :: Stream (a, b) -> (Stream a, b)
 unstream (Cons (x, y) xs) = (Cons x (fst $ unstream xs), y)
 
--- exercise 10.4
+
+-------------------
+-- exercise 10.4 --
+-------------------
 (|><) :: Arrow (~>) => a ~> b -> (a -> b) -> (a, a) ~> (b, b)
 f |>< g = first f >>> arr (second g)
 
 {-
   TODO
+
+  functor laws
+     arr id        = id
+     arr (f >>> g) = arr f >>> arr g
 -}
 
 
@@ -212,6 +242,13 @@ instance ArrowApply NonDet where
   -- app :: NonDet (NonDet i o, i) o
   app = ND $ \(ND f, i) -> f i
 
+-------------------
+-- exercise 10.5 --
+-------------------
+
+-------------------
+-- exercise 10.6 --
+-------------------
 instance ArrowApply Auto where
   app = arr $ \(A f, x) -> fst (f x)
 
@@ -281,3 +318,19 @@ instance ArrowLoop Auto where
 instance ArrowLoop StreamMap where
   loop (SM f) = SM $ trace $ unstream . f . stream
 
+--
+class ArrowLoop (~>) => ArrowCircuit (~>) where
+  delay :: a -> a ~> a
+
+counter :: ArrowCircuit (~>) => Bool ~> Int
+counter = proc reset -> do
+            rec output <- id -< if reset then 0 else next
+                next <- delay 0 -< output + 1
+            id -< output
+
+instance ArrowCircuit Auto where
+  delay x = A $ \y -> (x, delay y)
+
+runAuto :: Auto i o -> [i] -> [o]
+runAuto (A f) [] = []
+runAuto (A f) (x:xs) = let (y, g) = f x in y:runAuto g xs
