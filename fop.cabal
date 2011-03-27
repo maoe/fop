@@ -15,10 +15,11 @@ Library
   -- Modules exported by the library.
   Exposed-modules:   Arrows, Hom, ArrowTrans,
                      Term, Type
-
   Build-depends:     base >= 4,
-                     pretty
-  
+                     pretty,
+                     mtl == 2.*,
+                     QuickCheck == 2.*
+  Ghc-options:       -Wall
   -- Modules not exported by this package.
   -- Other-modules:       
   
