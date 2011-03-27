@@ -35,11 +35,12 @@ bit True  = I
 
 -- | Generic compresssion
 compress :: Type t -> t -> [Bit]
-compress RInt          i      = compressInt i
-compress RChar         c      = compressChar c
-compress (RList _)     []     = [O]
-compress (RList ra)    (a:as) = I:compress ra a ++ compress (RList ra) as
-compress (RPair ra rb) (a, b) = compress ra a ++ compress rb b
+compress RInt          i         = compressInt i
+compress RChar         c         = compressChar c
+compress (RList _)     []        = [O]
+compress (RList ra)    (a:as)    = I:compress ra a ++ compress (RList ra) as
+compress (RPair ra rb) (a, b)    = compress ra a ++ compress rb b
+compress RDyn          (Dyn t a) = compressRep (Rep t) ++ compress t a
 
 -- | Generic uncompresssion
 uncompress :: Type t -> [Bit] -> t
@@ -50,6 +51,7 @@ uncompress' RInt          = uncompressInt
 uncompress' RChar         = uncompressChar
 uncompress' (RList ra)    = uncompressList ra
 uncompress' (RPair ra rb) = uncompressPair ra rb
+uncompress' RDyn          = uncompressDyn
 
 type Uncompressor a = State [Bit] a
 
@@ -77,6 +79,11 @@ uncompressList ra = do
 
 uncompressPair :: Type a -> Type b ->  Uncompressor (a, b)
 uncompressPair ra rb = (,) <$> uncompress' ra <*> uncompress' rb
+
+uncompressDyn :: Uncompressor Dynamic
+uncompressDyn = do
+  Rep t <- uncompressRep'
+  Dyn t <$> uncompress' t
 
 compressInt :: Int32 -> [Bit]
 compressInt i = unfoldr (uncurry decimalToBit) (32, i)
@@ -149,12 +156,21 @@ compressRep (Rep (RPair ra rb)) = [I,O,O] ++ compressRep (Rep ra) ++ compressRep
 compressRep (Rep RDyn)          = [O,I,I]
 
 uncompressRep :: [Bit] -> Rep
-uncompressRep (I:I:I:_)  = Rep RInt
-uncompressRep (I:I:O:_)  = Rep RChar
-uncompressRep (I:O:I:bs) = undefined
-uncompressRep (I:O:O:bs) = undefined
-uncompressRep (O:I:I:bs) = Rep RDyn
-uncompressRep _          = error "illegal input"
+uncompressRep = evalState uncompressRep'
+
+uncompressRep' :: Uncompressor Rep
+uncompressRep' = do
+  bs <- take 3
+  case bs of
+    [I,I,I] -> return $ Rep RInt
+    [I,I,O] -> return $ Rep RChar
+    [I,O,I] -> do Rep ra <- uncompressRep'
+                  return $ Rep (RList ra)
+    [I,O,O] -> do Rep ra <- uncompressRep'
+                  Rep rb <- uncompressRep'
+                  return $ Rep (RPair ra rb)
+    [O,I,I] -> return $ Rep RDyn
+    _       -> fail "illegal input"
 
 -- Propterties
 prop_compress_Int :: NonNegative Int32 -> Bool
