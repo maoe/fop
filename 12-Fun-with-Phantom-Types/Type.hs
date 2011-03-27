@@ -26,12 +26,14 @@ data Dynamic where
 rString :: Type String
 rString = RList RChar
 
-data Bit = O | I deriving (Show, Eq, Ord)
+-- | Bit representation
+data Bit = O | I deriving (Show, Enum)
 
 bit :: Bool -> Bit
 bit False = O
 bit True  = I
-            
+
+-- | Generic compresssion
 compress :: Type t -> t -> [Bit]
 compress RInt          i      = compressInt i
 compress RChar         c      = compressChar c
@@ -39,6 +41,7 @@ compress (RList _)     []     = [O]
 compress (RList ra)    (a:as) = I:compress ra a ++ compress (RList ra) as
 compress (RPair ra rb) (a, b) = compress ra a ++ compress rb b
 
+-- | Generic uncompresssion
 uncompress :: Type t -> [Bit] -> t
 uncompress ra = evalState (uncompress' ra)
 
@@ -87,8 +90,7 @@ decimalToBit i n = Just (bit (m > 0), (pred i, d))
   where (d, m) = n `divMod` 2
 
 bitToDecimal :: Bit -> Int32 -> Int32
-bitToDecimal I n = n*2 + 1
-bitToDecimal O n = n*2
+bitToDecimal b n = n*2 + fromIntegral (fromEnum b)
 
 pretty :: Type t -> t -> Doc
 pretty RInt          i      = int $ fromIntegral i
