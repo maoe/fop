@@ -1,16 +1,18 @@
+{-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE GADTs, TemplateHaskell #-}
 module Type where
 import Control.Applicative       (Alternative(..), (<$>), (<*>), pure)
-import Control.Arrow             ((***))
-import Control.Monad.State       (State, get, put, runState, evalState)
+import Control.Arrow             -- ((***))
+import Control.Monad.State       (State, get, put, evalState)
 import Data.Char                 (ord, chr, isAscii)
 import Data.Int                  (Int32)
 import Data.List                 (unfoldr)
+import Data.Maybe                (isJust, fromJust)
 import Test.QuickCheck
 import Test.QuickCheck.All       (quickCheckAll)
 import Text.PrettyPrint.HughesPJ (Doc, (<>), char, text, int)
 import Prelude hiding (compare, zip, take, head)
-import qualified Prelude as P (compare, take, head)
+import qualified Prelude as P (compare, head)
 
 -- | Type representation
 data Type t where
@@ -19,6 +21,10 @@ data Type t where
   RList :: Type a -> Type [a]
   RPair :: Type a -> Type b -> Type (a, b)
   RDyn  :: Type Dynamic
+  RFun  :: Type a -> Type b -> Type (a -> b)
+
+deriving instance Show (Type t)
+-- deriving instance Eq (Type t)
 
 data Dynamic where
   Dyn :: Type t -> t -> Dynamic
@@ -92,7 +98,7 @@ compressChar :: Char -> [Bit]
 compressChar c = unfoldr (uncurry decimalToBit) (7, fromIntegral (ord c))
 
 decimalToBit :: Int -> Int32 -> Maybe (Bit, (Int, Int32))
-decimalToBit  0  _ = Nothing
+decimalToBit 0 _ = Nothing
 decimalToBit i n = Just (bit (m > 0), (pred i, d))
   where (d, m) = n `divMod` 2
 
@@ -100,38 +106,44 @@ bitToDecimal :: Bit -> Int32 -> Int32
 bitToDecimal b n = n*2 + fromIntegral (fromEnum b)
 
 pretty :: Type t -> t -> Doc
-pretty RInt          i      = int $ fromIntegral i
-pretty RChar c              = char c
-pretty (RList RChar) s      = text s
-pretty (RList _)     []     = text "[]"
-pretty (RList ra)    (a:as) = text "[" <> pretty ra a <> prettyL as
-  where prettyL = foldr (\a' -> (text "," <> pretty ra a' <>)) (text "]")
-pretty (RPair ra rb) (a, b) = text "("  <> pretty ra a
+pretty RInt          i          = int $ fromIntegral i
+pretty RChar c                  = char c
+pretty (RList RChar) s          = text s
+pretty (RList _)     []         = text "[]"
+pretty (RList ra)    (a:as)     = text "[" <> pretty ra a <> prettyL as
+  where prettyL                 = foldr (\a' -> (text "," <> pretty ra a' <>)) (text "]")
+pretty (RPair ra rb) (a, b)     = text "("  <> pretty ra a
                            <> text ", " <> pretty rb b
                            <> text ")"
+pretty RDyn          (Dyn t ra) = text "Dyn" <> pretty t ra
 
 -- Exercise 12.3
 eq :: Type t -> t -> t -> Bool
-eq RInt          a      b      = a == b
-eq RChar         a      b      = a == b
-eq (RList _)     []     []     = True
-eq (RList _)     (_:_)  []     = False
-eq (RList _)     []     (_:_)  = False
-eq t@(RList ra)  (a:as) (b:bs) = eq ra a b && eq t as bs
-eq (RPair ra rb) (a, c) (b, d) = eq ra a b && eq rb c d
+eq RInt          a           b           = a == b
+eq RChar         a           b           = a == b
+eq (RList _)     []          []          = True
+eq (RList _)     (_:_)       []          = False
+eq (RList _)     []          (_:_)       = False
+eq t@(RList ra)  (a:as)      (b:bs)      = eq ra a b && eq t as bs
+eq (RPair ra rb) (a, c)      (b, d)      = eq ra a b && eq rb c d
+eq RDyn          (Dyn ta ra) (Dyn tb rb) = Rep ta == Rep tb &&
+                                           isJust mrb &&
+                                           eq ta ra (fromJust mrb)
+  where mrb = cast (Dyn tb rb) ta
 
 compare :: Type t -> t -> t -> Ordering
-compare RInt          a      b      = P.compare a b
-compare RChar         a      b      = P.compare a b
-compare (RList _)     []     []     = EQ
-compare (RList _)     (_:_)  []     = GT
-compare (RList _)     []     (_:_)  = LT
-compare t@(RList ra)  (a:as) (b:bs) = case compare ra a b of
+compare RInt          a           b           = P.compare a b
+compare RChar         a           b           = P.compare a b
+compare (RList _)     []          []          = EQ
+compare (RList _)     (_:_)       []          = GT
+compare (RList _)     []          (_:_)       = LT
+compare t@(RList ra)  (a:as)      (b:bs)      = case compare ra a b of
                                         EQ       -> compare t as bs
                                         ordering -> ordering
-compare (RPair ra rb) (a, c) (b, d) = case compare ra a b of
+compare (RPair ra rb) (a, c)      (b, d)      = case compare ra a b of
                                         EQ       -> compare rb c d
                                         ordering -> ordering
+compare RDyn          (Dyn ta ra) (Dyn tb rb) = undefined
 
 -- Dynamic values
 tequal :: Alternative f => Type t -> Type r -> f (t -> r)
@@ -139,6 +151,7 @@ tequal RInt            RInt            = pure id
 tequal RChar           RChar           = pure id
 tequal (RList ra1)     (RList ra2)     = fmap  <$> tequal ra1 ra2
 tequal (RPair ra1 rb1) (RPair ra2 rb2) = (***) <$> tequal ra1 ra2 <*> tequal rb1 rb2
+tequal (RFun ra1 rb1)  (RFun ra2 rb2)  = undefined
 tequal _               _               = empty
 
 cast :: Dynamic -> Type t -> Maybe t
@@ -178,6 +191,22 @@ prop_compress_Int (NonNegative n) = n == uncompress RInt (compress RInt n)
 
 prop_compress_Char :: Char -> Property
 prop_compress_Char c = isAscii c ==> c == uncompress RChar (compress RChar c)
+
+-- prop_IdempotentRep :: Rep -> Bool
+-- prop_IdempotentRep r = r == uncompressRep (compressRep r)
+
+instance Arbitrary Rep where
+  arbitrary = oneof [ return $ Rep RInt
+                    , return $ Rep RChar
+                    , do Rep t <- arbitrary
+                         return $ Rep (RList t)
+                    , do Rep ta <- arbitrary
+                         Rep tb <- arbitrary
+                         return $ Rep (RPair ta tb)
+                    ]
+
+instance Eq Rep where
+  Rep ra == Rep rb = isJust $ tequal ra rb
 
 test :: IO Bool
 test = $quickCheckAll
