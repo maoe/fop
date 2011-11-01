@@ -146,12 +146,14 @@ compare (RPair ra rb) (a, c)      (b, d)      = case compare ra a b of
 compare RDyn          (Dyn ta ra) (Dyn tb rb) = undefined
 
 -- Dynamic values
-tequal :: Alternative f => Type t -> Type r -> f (t -> r)
+tequal :: Type t -> Type r -> Maybe (t -> r)
 tequal RInt            RInt            = pure id
 tequal RChar           RChar           = pure id
 tequal (RList ra1)     (RList ra2)     = fmap  <$> tequal ra1 ra2
 tequal (RPair ra1 rb1) (RPair ra2 rb2) = (***) <$> tequal ra1 ra2 <*> tequal rb1 rb2
-tequal (RFun ra1 rb1)  (RFun ra2 rb2)  = undefined
+tequal (RFun ra1 rb1)  (RFun ra2 rb2)  = (\f g h -> g . h . f)
+                                           <$> tequal ra2 ra1
+                                           <*> tequal rb1 rb2
 tequal _               _               = empty
 
 cast :: Dynamic -> Type t -> Maybe t
