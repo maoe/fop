@@ -16,12 +16,16 @@ import qualified Prelude as P (compare, head)
 
 -- | Type representation
 data Type t where
-  RInt  :: Type Int32
-  RChar :: Type Char
-  RList :: Type a -> Type [a]
-  RPair :: Type a -> Type b -> Type (a, b)
-  RDyn  :: Type Dynamic
-  RFun  :: Type a -> Type b -> Type (a -> b)
+  RInt    :: Type Int32
+  RChar   :: Type Char
+  RList   :: Type a -> Type [a]
+  RPair   :: Type a -> Type b -> Type (a, b)
+  RDyn    :: Type Dynamic
+  RFun    :: Type a -> Type b -> Type (a -> b)
+  RPerson :: Type Person
+
+rString :: Type String
+rString = RList RChar
 
 deriving instance Show (Type t)
 -- deriving instance Eq (Type t)
@@ -29,8 +33,49 @@ deriving instance Show (Type t)
 data Dynamic where
   Dyn :: Type t -> t -> Dynamic
 
-rString :: Type String
-rString = RList RChar
+type Name = String
+type Age  = Int32
+data Person = Person Name Age
+
+tick :: Name -> Traversal
+tick s RPerson (Person n a)
+  | s == n       = Person n (a + 1)
+tick _ _       p = p
+
+type Traversal = forall t. Type t -> t -> t
+
+copy :: Traversal
+copy _ = id
+
+(<.>) :: Traversal -> Traversal -> Traversal
+(f <.> g) rt = f rt . g rt
+
+imap :: Traversal -> Traversal
+imap _ RInt          i            = i
+imap _ RChar         c            = c
+imap _ (RList _)     []           = []
+imap f (RList ra)    (a:as)       = f ra a:f (RList ra) as
+imap f (RPair ra rb) (a, b)       = (f ra a, f rb b)
+imap f RPerson       (Person n a) = Person (f rString n) (f RInt a)
+
+everywhere :: Traversal -> Traversal
+everywhere f = f <.> imap (everywhere f)
+
+everywhere' :: Traversal -> Traversal
+everywhere' f = imap (everywhere' f) <.> f
+
+type Query q = forall t. Type t -> t -> q
+
+isum :: Query Int -> Query Int
+isum _ RInt          _            = 0
+isum _ RChar         _            = 0
+isum _ (RList _)     []           = 0
+isum f (RList ra)    (a:as)       = f ra a + f (RList ra) as
+isum f (RPair ra rb) (a, b)       = f ra a + f rb b
+isum f RPerson       (Person n a) = f rString n + f RInt a
+
+total :: Query Int -> Query Int
+total f rt t = f rt t + isum (total f) rt t
 
 -- | Bit representation
 data Bit = O | I deriving (Show, Enum)
