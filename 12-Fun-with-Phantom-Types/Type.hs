@@ -1,5 +1,5 @@
-{-# LANGUAGE StandaloneDeriving #-}
-{-# LANGUAGE GADTs, TemplateHaskell #-}
+{-# LANGUAGE GADTs, TemplateHaskell, StandaloneDeriving, RankNTypes #-}
+{-# OPTIONS_GHC -Wall #-}
 module Type where
 import Control.Applicative       (Alternative(..), (<$>), (<*>), pure)
 import Control.Arrow             -- ((***))
@@ -185,7 +185,7 @@ uncompressRep' = do
                   Rep rb <- uncompressRep'
                   return $ Rep (RPair ra rb)
     [O,I,I] -> return $ Rep RDyn
-    _       -> fail "illegal input"
+    _       -> fail "invalid input"
 
 -- Propterties
 prop_compress_Int :: NonNegative Int32 -> Bool
